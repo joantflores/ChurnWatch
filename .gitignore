@@ -1,0 +1,21 @@
+# Visual Studio
+.vs/
+*.db
+*.json
+*.sqlite
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Archivos grandes o temporales
+*.log
+*.tmp
+*.pdf
+*.xlsx
+*.csv
+# (Nota: Si quieres subir los CSV quita el comentario de la línea de arriba)
