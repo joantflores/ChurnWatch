@@ -1,0 +1,12 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\outputs",
+    "\\outputs\\eda\\telco_churn",
+    "\\outputs\\presentation",
+    "\\outputs\\shap",
+    "\\outputs\\train"
+  ],
+  "SelectedNode": "\\build_churn.py",
+  "PreviewInSolutionExplorer": false
+}
