@@ -1,8 +1,34 @@
+"""
+ChurnWatch — Motor de Churn
+===========================
+Módulo responsable de:
+  1. Construir la variable objetivo Churn a partir de señales de comportamiento.
+  2. Aplicar feature engineering (encoding + normalización).
+  3. Exponer funciones reutilizables para el notebook y la app Dash.
+
+Uso básico:
+    from churn_engine import construir_churn, preparar_features, resumen_churn
+
+    df_raw   = pd.read_csv("shopping_trends.csv")
+    df_churn = construir_churn(df_raw)          # agrega columna Churn
+    X, y     = preparar_features(df_churn)      # listo para sklearn
+    print(resumen_churn(df_churn))
+"""
+
 from __future__ import annotations
 
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURACIÓN
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Frecuencias que indican BAJA actividad de compra
+# Fuente: documento del proyecto (Annually + Every 3 Months + Quarterly)
+# ⚠️  El notebook original solo usaba ["Annually"] → churn rate irreal del 2.9%
+#     Al incluir las 3 frecuencias bajas el resultado es más realista y útil
 BAJA_FRECUENCIA = ["Annually", "Every 3 Months", "Quarterly"]
 
 # Percentil para definir "pocas compras previas"
@@ -35,6 +61,11 @@ COLUMNAS_NUM = [
     "Purchase Amount (USD)",
 ]
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. CONSTRUCCIÓN DE LA VARIABLE CHURN
+# ─────────────────────────────────────────────────────────────────────────────
+
 def construir_churn(
     df: pd.DataFrame,
     baja_frecuencia: list[str] = BAJA_FRECUENCIA,
@@ -50,14 +81,15 @@ def construir_churn(
             2. Previous Purchases      ≤  percentil 25 del dataset
             3. Subscription Status     == "No"
 
-    Parametros
+    Parameters
     ----------
     df              : DataFrame con las columnas del dataset original.
     baja_frecuencia : Lista de valores de frecuencia que se consideran bajos.
     percentil       : Percentil (0-1) para el umbral de compras previas.
     verbose         : Si True imprime un resumen del resultado.
 
-    Return
+    Returns
+    -------
     DataFrame con la columna ``Churn`` añadida (0 = activo, 1 = en riesgo).
     """
     # Verificar columnas mínimas
@@ -70,9 +102,10 @@ def construir_churn(
 
     df = df.copy()
 
+    # Umbral dinámico basado en los datos reales
     umbral_compras = df["Previous Purchases"].quantile(percentil)
 
-    # Mascara de churn (las 3 condiciones deben cumplirse)
+    # Máscara de churn (las 3 condiciones deben cumplirse)
     mask = (
         df["Frequency of Purchases"].isin(baja_frecuencia)
         & (df["Previous Purchases"] <= umbral_compras)
@@ -109,7 +142,11 @@ def construir_churn(
 
     return df
 
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 2. FEATURE ENGINEERING
+# ─────────────────────────────────────────────────────────────────────────────
+
 def preparar_features(
     df: pd.DataFrame,
     scaler: StandardScaler | None = None,
@@ -139,6 +176,7 @@ def preparar_features(
 
     df_fe = df[COLUMNAS_OHE + COLUMNAS_NUM + ["Churn"]].copy()
 
+    # One-Hot Encoding — drop_first evita multicolinealidad
     df_fe = pd.get_dummies(df_fe, columns=COLUMNAS_OHE, drop_first=True)
 
     y = df_fe.pop("Churn")
@@ -156,7 +194,11 @@ def preparar_features(
 
     return X, y, scaler
 
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 3. RESUMEN ESTADÍSTICO
+# ─────────────────────────────────────────────────────────────────────────────
+
 def resumen_churn(df: pd.DataFrame) -> pd.DataFrame:
     """
     Devuelve un DataFrame con el churn rate desglosado por variable categórica.
@@ -183,7 +225,10 @@ def resumen_churn(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(resultados.values(), ignore_index=True)
 
 
-# Ejecucion directa para pruebas rápidas (no recomendado para produccion)
+# ─────────────────────────────────────────────────────────────────────────────
+# EJECUCIÓN DIRECTA (para probar el módulo solo)
+# ─────────────────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     import sys
 
@@ -192,19 +237,20 @@ if __name__ == "__main__":
 
     df_raw = pd.read_csv(csv_path)
 
+    # ── Comparativa: definición original vs corregida ─────────────────────
     print(">>> DEFINICIÓN ORIGINAL (solo 'Annually'):")
     df_orig = construir_churn(df_raw, baja_frecuencia=["Annually"], verbose=True)
 
     print("\n>>> DEFINICIÓN CORREGIDA (Annually + Every 3 Months + Quarterly):")
     df_corr = construir_churn(df_raw, verbose=True)
 
-    #Feature engineering
+    # ── Feature engineering ───────────────────────────────────────────────
     print("\n>>> FEATURE ENGINEERING:")
     X, y, scaler = preparar_features(df_corr)
     print(f"  Shape de X : {X.shape}")
     print(f"  Columnas   : {X.columns.tolist()}")
     print(f"  Balance    : Churn=0 → {(y==0).sum():,}  |  Churn=1 → {(y==1).sum():,}")
 
-    #Resumen por variable
+    # ── Resumen por variable ──────────────────────────────────────────────
     print("\n>>> CHURN RATE POR VARIABLE:")
     print(resumen_churn(df_corr).to_string(index=False))

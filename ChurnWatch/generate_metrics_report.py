@@ -22,6 +22,7 @@ def main():
     df.to_csv(csv_out)
     print(f"CSV guardado: {csv_out}")
 
+    # simple bar chart for AUC
     plt.figure(figsize=(6, 4))
     df['roc_auc'].plot(kind='bar', color=['#185FA5', '#E24B4A', '#BA7517'])
     plt.title('ROC-AUC por modelo')

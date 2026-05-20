@@ -3,8 +3,10 @@
 Regla: churn=1 si frequency es una de ['annually','every 3 months','quarterly']
 y previous_purchases <= percentil25 (por defecto 13). Guarda el dataset con la columna `churn`.
 """
+
 from pathlib import Path
 import pandas as pd
+from typing import Optional
 
 
 ROOT = Path(__file__).resolve().parent
@@ -18,7 +20,7 @@ def normalize_cols(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def build_churn(df: pd.DataFrame, p25: int | None = None) -> pd.DataFrame:
+def build_churn(df: pd.DataFrame, p25: Optional[int] = None) -> pd.DataFrame:
     df = df.copy()
     df = normalize_cols(df)
     if "previous_purchases" in df.columns:
@@ -28,8 +30,8 @@ def build_churn(df: pd.DataFrame, p25: int | None = None) -> pd.DataFrame:
     if p25 is None:
         p25 = int(prev.quantile(0.25))
     low_freq = {"annually", "every 3 months", "quarterly", "cada 3 meses", "anual", "trimestral"}
-    if "frequency_of_purchases" in df.columns:
-        freq = df["frequency_of_purchases"].astype(str).str.lower().str.strip()
+    if "frequency of purchases" in df.columns:
+        freq = df["frequency of purchases"].astype(str).str.lower().str.strip()
     else:
         freq = pd.Series("", index=df.index)
     churn = ((freq.isin(low_freq)) & (prev <= p25)).astype(int)
@@ -41,14 +43,14 @@ def main() -> None:
     if not INFILE.exists():
         print(f"No se encontro {INFILE}. Coloca el CSV de Customer Shopping Trends como 'shopping_trends.csv'")
         return
-       
+    # intentar leer con utf-8, si falla probar latin-1 y finalmente un decode con replace
     try:
         df = pd.read_csv(INFILE, encoding="utf-8")
     except UnicodeDecodeError:
         try:
             df = pd.read_csv(INFILE, encoding="latin-1")
         except Exception:
-    
+            # ultimo recurso: leer en binario y decodificar reemplazando bytes invalidos
             with open(INFILE, "rb") as f:
                 raw = f.read()
             import io as _io

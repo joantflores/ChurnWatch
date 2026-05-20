@@ -15,6 +15,7 @@ from dash import html, dcc, dash_table, Input, Output, State, ctx
 import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
+from typing import Optional
 
 app = dash.Dash(
     __name__,
@@ -233,19 +234,21 @@ try:
         else:
             MODEL = payload
             model_name = "Modelo"
-        if MODEL is not None and MODEL_SCALER is not None:
+        if MODEL is not None:
             MODEL_INFO = {"enabled": True, "mode_label": f"Modo ML: {model_name}"}
 except Exception:
     MODEL_INFO = {"enabled": False, "mode_label": "Modo heurístico"}
 
 # ── Columnas requeridas (alias aceptados) ────────────────────────────────────
 COL_ALIASES = {
-    "customer_id":             ["customer_id", "id", "customer", "cliente"],
-    "frequency_of_purchases":  ["frequency_of_purchases", "frequency", "frecuencia"],
-    "previous_purchases":      ["previous_purchases", "purchases", "compras"],
-    "subscription_status":     ["subscription_status", "subscription", "suscripcion"],
-    "purchase_amount_usd":     ["purchase_amount_usd", "amount", "monto"],
-    "discount_applied":        ["discount_applied", "discount", "descuento"],
+    "customer_id":             ["customer_id", "id", "customer", "cliente", "customer id"],
+    "frequency_of_purchases":  ["frequency_of_purchases", "frequency", "frecuencia", "frequency of purchases"],
+    "previous_purchases":      ["previous_purchases", "purchases", "compras", "previous purchases"],
+    "subscription_status":     ["subscription_status", "subscription", "suscripcion", "subscription status"],
+    "purchase_amount_usd":     ["purchase_amount_usd", "amount", "monto", "purchase amount (usd)", "purchase amount"],
+    "discount_applied":        ["discount_applied", "discount", "descuento", "discount applied"],
+    "promo_code_used":         ["promo_code_used", "promo code used", "promo code"],
+    "payment_method":          ["payment_method", "payment method", "payment"],
 }
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -260,7 +263,7 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
                     break
     return df.rename(columns=rename)
 
-def parse_file(contents: str, filename: str) -> pd.DataFrame | None:
+def parse_file(contents: str, filename: str) -> Optional[pd.DataFrame]:
     """Decodifica y parsea el archivo subido (CSV o Excel)."""
     content_type, content_string = contents.split(",")
     decoded = base64.b64decode(content_string)
@@ -620,11 +623,90 @@ def modal_detalle() -> dbc.Modal:
                              "fontSize": "13px", "lineHeight": "1.5",
                              "color": TEXT_SEC, "background": BG_SEC,
                              "borderRadius": "8px", "padding": "10px 12px",
+                             "whiteSpace": "pre-wrap",
                          }),
             ]),
         ],
     )
 
+
+# ── Vistas ───────────────────────────────────────────────────────────────────
+def view_selector() -> html.Div:
+    return html.Div(
+        style={"display": "flex", "gap": "1rem", "marginBottom": "2rem", "borderBottom": BORDER},
+        children=[
+            html.Button("Carga Masiva", id="tab-btn-batch", n_clicks=0,
+                        style={"background": "none", "border": "none", "borderBottom": f"2px solid {BLUE}", "color": BLUE, "padding": "10px 15px", "cursor": "pointer", "fontWeight": "500"}),
+            html.Button("Ingreso Manual", id="tab-btn-manual", n_clicks=0,
+                        style={"background": "none", "border": "none", "borderBottom": "2px solid transparent", "color": TEXT_SEC, "padding": "10px 15px", "cursor": "pointer", "fontWeight": "500"}),
+        ]
+    )
+
+def manual_entry_section() -> html.Div:
+    return html.Div(
+        id="manual-section",
+        style={"display": "none"},
+        children=[
+            html.Div("Evaluación de cliente individual",
+                     style={"fontSize": "16px", "fontWeight": "500", "color": TEXT_PRI, "marginBottom": "1rem"}),
+            html.Div(
+                style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "1rem", "marginBottom": "1.5rem"},
+                children=[
+                    html.Div([
+                        html.Label("Frecuencia de compra", style={"fontSize": "12px", "color": TEXT_SEC}),
+                        dcc.Dropdown(
+                            id="manual-freq",
+                            options=[
+                                {"label": "Semanal (Weekly)", "value": "weekly"},
+                                {"label": "Mensual (Monthly)", "value": "monthly"},
+                                {"label": "Trimestral (Quarterly)", "value": "quarterly"},
+                                {"label": "Cada 3 meses (Every 3 months)", "value": "every 3 months"},
+                                {"label": "Anual (Annually)", "value": "annually"}
+                            ],
+                            value="monthly",
+                            clearable=False
+                        )
+                    ]),
+                    html.Div([
+                        html.Label("Compras previas", style={"fontSize": "12px", "color": TEXT_SEC}),
+                        dbc.Input(id="manual-prev", type="number", min=0, value=5, style={"height": "36px"})
+                    ]),
+                    html.Div([
+                        html.Label("Monto promedio (USD)", style={"fontSize": "12px", "color": TEXT_SEC}),
+                        dbc.Input(id="manual-amount", type="number", min=0, value=50, style={"height": "36px"})
+                    ]),
+                    html.Div([
+                        html.Label("Suscripción activa", style={"fontSize": "12px", "color": TEXT_SEC}),
+                        dcc.Dropdown(
+                            id="manual-subs",
+                            options=[{"label": "Sí", "value": "Yes"}, {"label": "No", "value": "No"}],
+                            value="No",
+                            clearable=False
+                        )
+                    ]),
+                    html.Div([
+                        html.Label("Descuento aplicado", style={"fontSize": "12px", "color": TEXT_SEC}),
+                        dcc.Dropdown(
+                            id="manual-disc",
+                            options=[{"label": "Sí", "value": "Yes"}, {"label": "No", "value": "No"}],
+                            value="No",
+                            clearable=False
+                        )
+                    ]),
+                ]
+            ),
+            html.Button(
+                "Evaluar cliente",
+                id="btn-manual-predict",
+                style={
+                    "background": BLUE, "color": "#E6F1FB", "border": "none",
+                    "padding": "10px 24px", "borderRadius": "8px", "fontSize": "13px",
+                    "fontWeight": "500", "cursor": "pointer"
+                }
+            ),
+            html.Div(id="manual-results", style={"marginTop": "2rem"})
+        ]
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # LAYOUT PRINCIPAL
@@ -653,7 +735,9 @@ def display_page(pathname):
                 style={"maxWidth": "960px", "margin": "0 auto",
                        "padding": "1.5rem 1rem"},
                 children=[
+                    view_selector(),
                     upload_zone(),
+                    manual_entry_section(),
                     results_section(),
                 ],
             ),
@@ -715,16 +799,46 @@ def process_upload(contents, filename):
     )
 
 
+# 1b. Alternar entre Carga Masiva y Manual
+@app.callback(
+    Output("upload-section", "style", allow_duplicate=True),
+    Output("manual-section", "style", allow_duplicate=True),
+    Output("results-section", "style", allow_duplicate=True),
+    Output("tab-btn-batch", "style", allow_duplicate=True),
+    Output("tab-btn-manual", "style", allow_duplicate=True),
+    Input("tab-btn-batch", "n_clicks"),
+    Input("tab-btn-manual", "n_clicks"),
+    State("store-results", "data"),
+    prevent_initial_call=True
+)
+def toggle_tabs(n_batch, n_manual, records):
+    ctx_id = ctx.triggered_id
+    active_style = {"background": "none", "border": "none", "borderBottom": f"2px solid {BLUE}", "color": BLUE, "padding": "10px 15px", "cursor": "pointer", "fontWeight": "500"}
+    inactive_style = {"background": "none", "border": "none", "borderBottom": "2px solid transparent", "color": TEXT_SEC, "padding": "10px 15px", "cursor": "pointer", "fontWeight": "500"}
+    
+    if ctx_id == "tab-btn-manual":
+        return {"display": "none"}, {"display": "block"}, {"display": "none"}, inactive_style, active_style
+    else:
+        if records:
+            return {"display": "none"}, {"display": "none"}, {"display": "block"}, active_style, inactive_style
+        return {"display": "block"}, {"display": "none"}, {"display": "none"}, active_style, inactive_style
+
+
 # 2. Resetear → volver a pantalla de upload
 @app.callback(
     Output("store-results", "data",     allow_duplicate=True),
     Output("upload-section", "style",   allow_duplicate=True),
     Output("results-section", "style",  allow_duplicate=True),
+    Output("manual-section", "style",   allow_duplicate=True),
+    Output("tab-btn-batch", "style",    allow_duplicate=True),
+    Output("tab-btn-manual", "style",   allow_duplicate=True),
     Input("btn-reset", "n_clicks"),
     prevent_initial_call=True,
 )
 def reset_upload(n):
-    return None, {"display": "block"}, {"display": "none"}
+    active_style = {"background": "none", "border": "none", "borderBottom": f"2px solid {BLUE}", "color": BLUE, "padding": "10px 15px", "cursor": "pointer", "fontWeight": "500"}
+    inactive_style = {"background": "none", "border": "none", "borderBottom": "2px solid transparent", "color": TEXT_SEC, "padding": "10px 15px", "cursor": "pointer", "fontWeight": "500"}
+    return None, {"display": "block"}, {"display": "none"}, {"display": "none"}, active_style, inactive_style
 
 
 # 3. Filtro activo → actualizar estilos de pills
@@ -932,6 +1046,71 @@ def open_modal(n_clicks_list, records):
         ),
     )
 
+# 6. Procesar entrada manual
+@app.callback(
+    Output("manual-results", "children"),
+    Input("btn-manual-predict", "n_clicks"),
+    State("manual-freq", "value"),
+    State("manual-prev", "value"),
+    State("manual-amount", "value"),
+    State("manual-subs", "value"),
+    State("manual-disc", "value"),
+    prevent_initial_call=True
+)
+def process_manual(n_clicks, freq, prev, amount, subs, disc):
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+        
+    df = pd.DataFrame([{
+        "customer_id": "Manual",
+        "frequency_of_purchases": freq,
+        "previous_purchases": prev,
+        "purchase_amount_usd": amount,
+        "subscription_status": subs,
+        "discount_applied": disc
+    }])
+    
+    res_df = build_results(df)
+    row = res_df.iloc[0]
+    
+    pct = row.get("__pct", 0)
+    risk = row.get("__risk", "Bajo")
+    mode = row.get("__model_mode", "Modo heurístico")
+    factors = row.get("__factors", "")
+    
+    risk_colors = {
+        "Alto":  (RED_LIGHT,   RED_DARK),
+        "Medio": (AMBER_LIGHT, AMBER),
+        "Bajo":  (GREEN_LIGHT, GREEN),
+    }
+    bg, fg = risk_colors.get(risk, (BG_SEC, TEXT_SEC))
+    
+    rec = RECOMENDACIONES.get(risk, "")
+    if factors:
+        rec += f"\n\nFactores SHAP: {factors}"
+        
+    return html.Div(
+        style={"background": BG_CARD, "border": BORDER, "borderRadius": "12px", "padding": "1.5rem", "animation": "fadeIn 0.5s ease-in"},
+        children=[
+            html.Div([
+                html.Span("Resultado del Análisis", style={"fontSize": "15px", "fontWeight": "500", "color": TEXT_PRI}),
+                html.Span(f" ({mode})", style={"fontSize": "12px", "color": TEXT_SEC, "marginLeft": "8px"})
+            ], style={"marginBottom": "1rem"}),
+            html.Div(
+                style={"display": "flex", "alignItems": "center", "gap": "1rem", "marginBottom": "1.5rem"},
+                children=[
+                    html.Div(
+                        style={"width": "200px", "height": "8px", "background": BG_SEC, "borderRadius": "4px"},
+                        children=html.Div(style={"width": f"{pct}%", "height": "100%", "background": fg, "borderRadius": "4px"})
+                    ),
+                    html.Span(f"{pct}% Probabilidad", style={"fontSize": "14px", "fontWeight": "500", "color": fg}),
+                    html.Span(f"Riesgo {risk}", style={"fontSize": "12px", "padding": "4px 12px", "borderRadius": "20px", "background": bg, "color": fg, "fontWeight": "500"})
+                ]
+            ),
+            html.Div("Recomendación", style={"fontSize": "11px", "fontWeight": "500", "color": TEXT_SEC, "textTransform": "uppercase", "letterSpacing": ".05em", "marginBottom": "8px"}),
+            html.Div(rec, style={"fontSize": "13px", "lineHeight": "1.5", "color": TEXT_SEC, "background": BG_SEC, "borderRadius": "8px", "padding": "10px 12px", "whiteSpace": "pre-wrap"})
+        ]
+    )
 
 if __name__ == "__main__":
     app.run(debug=True)

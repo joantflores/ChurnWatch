@@ -1,3 +1,7 @@
+"""Preprocesamiento y entrenamiento de modelos: LogisticRegression, RandomForest, XGBoost.
+Genera best_model.pkl con payload {"modelo": model, "scaler": scaler, "feature_columns": features, "nombre": name}
+Tambien guarda evaluaciones en outputs/train.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -36,16 +40,17 @@ def load_data(path: Path) -> pd.DataFrame:
 
 def preprocess(df: pd.DataFrame):
     df = df.copy()
-
+    # target
     y = df["churn"].astype(int)
-
+    # candidate features
     num_cols = [c for c in ["previous_purchases", "purchase_amount_usd"] if c in df.columns]
     cat_cols = [c for c in df.columns if c not in num_cols + ["churn", "customer_id"]]
 
-
+    # simple imputation
     X_num = df[num_cols].fillna(0)
     X_cat = df[cat_cols].fillna("missing").astype(str)
 
+    # column transformer
     preproc = ColumnTransformer([
         ("num", StandardScaler(), num_cols),
         ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat_cols),
@@ -56,12 +61,14 @@ def preprocess(df: pd.DataFrame):
 
 
 def fit_and_eval(X, y, preproc, num_cols, cat_cols):
+    # split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
     )
 
+    # If training set has only one class, use a DummyClassifier fallback
     if y_train.nunique() < 2:
-        print("Solo una clase presente en los datos de entrenamiento. Usando DummyClassifier como fallback.")
+        print("[WARN] Solo una clase presente en los datos de entrenamiento. Usando DummyClassifier como fallback.")
         dummy_pipe = Pipeline([
             ("pre", preproc),
             ("clf", DummyClassifier(strategy="most_frequent")),
@@ -94,6 +101,7 @@ def fit_and_eval(X, y, preproc, num_cols, cat_cols):
         print(f"Fallback guardado como ConstantBaseline en {OUT}")
         return
 
+    # build pipelines
     def make_pipeline(model):
         return Pipeline([
             ("pre", preproc),
@@ -121,12 +129,16 @@ def fit_and_eval(X, y, preproc, num_cols, cat_cols):
             "confusion_matrix": confusion_matrix(y_test, preds).tolist(),
         }
 
+    # choose best by roc_auc
     best_name = max(results.keys(), key=lambda k: results[k]["roc_auc"])
     best_model = models[best_name]
 
+    # save model and meta
+    # need fitted preproc/scaler; extract feature columns by transforming a sample
     fitted_preproc = best_model.named_steps["pre"]
-
+    # create a transformer to get feature names
     num_features = num_cols
+    # get cat feature names
     cat_encoder = fitted_preproc.named_transformers_["cat"]
     try:
         cat_names = cat_encoder.get_feature_names_out(cat_cols).tolist()

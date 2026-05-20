@@ -44,8 +44,13 @@ from xgboost import XGBClassifier
 from churn_engine import construir_churn, preparar_features
 
 warnings.filterwarnings("ignore")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURACIÓN
+# ─────────────────────────────────────────────────────────────────────────────
+
 CSV_PATH      = "shopping_trends.csv"
-OUTPUT_DIR    = Path(".")          
+OUTPUT_DIR    = Path(".")          # carpeta donde se guardan los .pkl
 K_FOLDS       = 5
 RANDOM_STATE  = 42
 SCORING       = ["roc_auc", "precision", "recall", "f1"]
@@ -53,7 +58,7 @@ SCORING       = ["roc_auc", "precision", "recall", "f1"]
 MODELOS = {
     "Logistic Regression": LogisticRegression(
         max_iter=1000,
-        class_weight="balanced",  
+        class_weight="balanced",   # compensa el desbalance de clases
         random_state=RANDOM_STATE,
     ),
     "Random Forest": RandomForestClassifier(
@@ -75,7 +80,10 @@ MODELOS = {
     ),
 }
 
-# CARGA Y PREPARACION
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. CARGA Y PREPARACIÓN
+# ─────────────────────────────────────────────────────────────────────────────
+
 def cargar_datos(csv_path: str = CSV_PATH) -> tuple[pd.DataFrame, pd.Series]:
     """Carga el CSV, construye Churn y aplica feature engineering."""
     print(f"\n{'='*55}")
@@ -91,13 +99,18 @@ def cargar_datos(csv_path: str = CSV_PATH) -> tuple[pd.DataFrame, pd.Series]:
     print(f"  Churn = 1 (en riesgo)  : {(y == 1).sum():,}")
     print(f"  Ratio desbalance       : 1 : {(y==0).sum() / max((y==1).sum(),1):.1f}\n")
 
+    # Guardar scaler para usarlo en la app Dash
     with open(OUTPUT_DIR / "scaler.pkl", "wb") as f:
         pickle.dump(scaler, f)
     print("  ✅  scaler.pkl guardado")
 
     return X, y, scaler
 
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 2. VALIDACIÓN CRUZADA
+# ─────────────────────────────────────────────────────────────────────────────
+
 def evaluar_con_cv(
     X: pd.DataFrame,
     y: pd.Series,
@@ -149,7 +162,11 @@ def evaluar_con_cv(
 
     return df_res
 
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 3. ENTRENAMIENTO FINAL + MÉTRICAS DETALLADAS
+# ─────────────────────────────────────────────────────────────────────────────
+
 def entrenar_y_evaluar(
     X: pd.DataFrame,
     y: pd.Series,
@@ -167,7 +184,7 @@ def entrenar_y_evaluar(
     mejor_nombre = df_cv["ROC-AUC"].idxmax()
     mejor_modelo = None
 
-    # Figura principal
+    # ── Figura principal ─────────────────────────────────────────────────
     fig = plt.figure(figsize=(18, 5 * len(MODELOS)))
     gs  = gridspec.GridSpec(len(MODELOS), 3, figure=fig,
                             hspace=0.45, wspace=0.35)
@@ -192,14 +209,14 @@ def entrenar_y_evaluar(
         if nombre == mejor_nombre:
             mejor_modelo = modelo
 
-        # Matriz de confusion 
+        # ── Matriz de confusión ──────────────────────────────────────
         ax_cm = fig.add_subplot(gs[i, 0])
         cm = confusion_matrix(y, y_pred)
         disp = ConfusionMatrixDisplay(cm, display_labels=["Activo", "Churn"])
         disp.plot(ax=ax_cm, colorbar=False, cmap="Blues")
         ax_cm.set_title(f"{nombre}\nMatriz de Confusión", fontsize=11)
 
-        # Curva ROC 
+        # ── Curva ROC ────────────────────────────────────────────────
         ax_roc = fig.add_subplot(gs[i, 1])
         fpr, tpr, _ = roc_curve(y, y_proba)
         ax_roc.plot(fpr, tpr, color="#185FA5", lw=2,
@@ -211,7 +228,7 @@ def entrenar_y_evaluar(
         ax_roc.set_title(f"{nombre}\nCurva ROC", fontsize=11)
         ax_roc.legend(loc="lower right", fontsize=10)
 
-        # Importancia de variables (RF y XGB) 
+        # ── Importancia de variables (RF y XGB) ─────────────────────
         ax_imp = fig.add_subplot(gs[i, 2])
         if hasattr(modelo, "feature_importances_"):
             importances = pd.Series(
@@ -222,6 +239,7 @@ def entrenar_y_evaluar(
             ax_imp.set_title(f"{nombre}\nTop 10 Features", fontsize=11)
             ax_imp.set_xlabel("Importancia")
         else:
+            # Logistic Regression → coeficientes
             coefs = pd.Series(
                 np.abs(modelo.coef_[0]), index=X.columns
             ).nlargest(10).sort_values()
@@ -240,7 +258,10 @@ def entrenar_y_evaluar(
     return mejor_modelo, mejor_nombre
 
 
-# COMPARATIVA VISUAL ENTRE MODELO
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. COMPARATIVA VISUAL ENTRE MODELOS
+# ─────────────────────────────────────────────────────────────────────────────
+
 def graficar_comparativa(df_cv: pd.DataFrame) -> None:
     """Barras lado a lado con las 4 métricas para los 3 modelos."""
     metricas = ["ROC-AUC", "Precision", "Recall", "F1"]

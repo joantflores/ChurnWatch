@@ -1,3 +1,12 @@
+"""
+ChurnWatch - Pendientes Avance 2
+1) Benchmark en Telco Customer Churn (mismos 3 modelos)
+2) Interpretabilidad SHAP del mejor modelo de Shopping Trends
+
+Uso:
+    python run_benchmark_shap.py
+"""
+
 from __future__ import annotations
 
 import pickle
@@ -48,6 +57,7 @@ MODELOS = {
     ),
 }
 
+
 def preparar_telco(path: Path) -> tuple[pd.DataFrame, pd.Series]:
     df = pd.read_csv(path)
     df = df.copy()
@@ -90,6 +100,7 @@ def evaluar_dataset(nombre_dataset: str, X: pd.DataFrame, y: pd.Series) -> pd.Da
         )
 
     return pd.DataFrame(rows)
+
 
 def benchmark_telco() -> pd.DataFrame:
     telco_path = ROOT / "TelcoCustomerChurn.csv"
@@ -189,6 +200,7 @@ def main() -> None:
 
     shap_shopping_best_model()
     print(f"\nListo. Revisa: {OUTPUT_DIR}")
+
 
 if __name__ == "__main__":
     main()
